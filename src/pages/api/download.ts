@@ -3,6 +3,7 @@ import fs from "fs";
 import youtubedl from "youtube-dl";
 import path from "path";
 import { fetchDownloads } from "./downloads";
+import ffmpeg from "fluent-ffmpeg";
 
 export default async (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method !== "POST") {
@@ -11,14 +12,14 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     return;
   }
 
-  const { links = [] } = req.body;
+  const { links = [], type = "video" } = req.body;
 
   if (!links.length) {
     res.statusCode = 400;
     return res.end();
   }
 
-  const promises = links.map(download);
+  const promises = links.map(download(type));
 
   await Promise.all(promises);
 
@@ -29,16 +30,37 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
   res.end(JSON.stringify(files));
 };
 
-function download(url: string) {
-  return new Promise((resolve, reject) => {
-    const video = youtubedl(url, ["-f best"], {});
+function download(type: string) {
+  return function startDownload(url: string) {
+    return new Promise((resolve, reject) => {
+      const video = youtubedl(url, ["-f best", "--no-mtime"], {});
 
-    video.on("end", resolve);
+      video.on("error", reject);
 
-    video.on("error", reject);
+      video.on("info", function onInfo(info) {
+        const filePath = path.join("downloads", info._filename);
 
-    video.on("info", function onInfo(info) {
-      video.pipe(fs.createWriteStream(path.join("downloads", info._filename)));
+        video.pipe(fs.createWriteStream(filePath));
+
+        video.on("end", async () => {
+          if (type === "video") {
+            return resolve();
+          }
+
+          await convertVideoToAudio(filePath);
+          resolve();
+        });
+      });
     });
+  };
+}
+
+function convertVideoToAudio(filePath: string) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(filePath)
+      .output(filePath.substr(0, filePath.lastIndexOf(".")) + ".mp3")
+      .on("end", resolve)
+      .on("error", reject)
+      .run();
   });
 }

@@ -8,13 +8,13 @@ import {
   Flex,
   Heading,
   FormControl,
-  Button,
+  Button
 } from "@chakra-ui/core";
 
 import useSWR from "swr";
 import { Container } from "../components/Container";
 
-const fetcher = (input, init?) => fetch(input, init).then((res) => res.json());
+const fetcher = (input, init?) => fetch(input, init).then(res => res.json());
 
 const Index = () => {
   const [files, setFiles] = React.useState("");
@@ -27,27 +27,28 @@ const Index = () => {
     fetcher
   );
 
-  async function downloadFiles(event: React.FormEvent) {
-    event.preventDefault();
+  function download(type: string) {
+    return async function startDownload() {
+      setIsDownloading(true);
+      setIsError(false);
 
-    setIsDownloading(true);
-    setIsError(false);
+      const response = await fetch("/api/download", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          links: files.split(" "),
+          type
+        })
+      })
+        .then(data => data.json())
+        .catch(err => setIsError(true));
 
-    const response = await fetch("/api/download", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        links: files.split(" "),
-      }),
-    })
-      .then((data) => data.json())
-      .catch((err) => setIsError(true));
+      setIsDownloading(false);
 
-    setIsDownloading(false);
-
-    mutate();
+      mutate();
+    };
   }
 
   if (isDownloading) {
@@ -69,22 +70,27 @@ const Index = () => {
         <Heading fontSize="1.5rem">
           Voer alle download links in met een spatie ertussen.
         </Heading>
-        <FormControl as="form" onSubmit={downloadFiles}>
+        <FormControl as="form">
           <Textarea
             value={files}
             onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
               setFiles(event.currentTarget.value)
             }
           />
-          <Button type="submit">Downloaden</Button>
+          <Button onClick={download("video")} type="submit">
+            Downloaden video
+          </Button>
+          <Button onClick={download("audio")} type="submit">
+            Downloaden audio
+          </Button>
         </FormControl>
 
         {downloadableFiles.length > 0 && (
           <List spacing={3}>
-            {downloadableFiles.map((file) => (
+            {downloadableFiles.map(file => (
               <ListItem>
                 <ListIcon icon="check-circle" color="green.500" />
-                <a download={true} href={`api/files/${file}`}>
+                <a target="_blank" download={true} href={`api/files/${file}`}>
                   {file}
                 </a>
               </ListItem>
